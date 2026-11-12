@@ -31,6 +31,8 @@ class PagosController extends Controller
         $cuotaPeriodo = null;
         $adeudosPrevios = 0;
         $ultimaLectura = 0;
+        $lecturasMedidor = [];
+        $tarifasMedidor = [];
 
         // 1. Buscador seguro
         if ($busqueda) {
@@ -76,12 +78,27 @@ class PagosController extends Controller
                 
                 $adeudosPrevios = $facturasPendientes->sum('total_factura');
                 
-                // Obtener la última lectura registrada si es servicio medido
+                // Obtener lecturas de la tabla "lecturas_medidor" si es servicio medido
+                if ($toma->calculo_fijo == 0) {
+                    $lecturasMedidor = DB::table('lecturas_medidor')
+                        ->where('toma_id', $toma->id_toma)
+                        ->orderBy('anio', 'asc')
+                        ->orderBy('mes', 'asc')
+                        ->get(['anio', 'mes', 'lectura', 'consumo_mes', 'consumo_acumulado', 'es_excedente']);
+
+                    $tarifasMedidor = DB::table('tarifas_config')
+                        ->where('id_tipo_predio', $toma->id_tipo_predio)
+                        ->orderBy('anio_vigencia', 'desc')
+                        ->orderBy('limite_inferior', 'asc')
+                        ->get();
+                }
+
+                // Respaldo de última lectura
                 $ultimaFactura = DB::table('facturas')
                     ->where('toma_id', $toma->id_toma)
                     ->orderBy('id_factura', 'desc')
                     ->first();
-                $ultimaLectura = $ultimaFactura ? ($ultimaFactura->lectura_actual ?? 0) : 0;
+                $ultimaLectura = $ultimaFactura ? ($ultimaFactura->lectura_actual ?? ($toma->lectura_base ?? 0)) : ($toma->lectura_base ?? 0);
 
                 $tieneHistorial = DB::table('facturas')
                     ->where('toma_id', $toma->id_toma)
@@ -104,14 +121,13 @@ class PagosController extends Controller
         }
         $folioSugerido = str_pad($siguienteNum, 6, '0', STR_PAD_LEFT);
 
-        // 4. Estado de Caja, Corte Activo e Historial de Cortes (cortes_caja)
+        // 4. Estado de Caja, Corte Activo e Historial de Cortes
         $trabajadorId = Auth::id() ?? 1;
         $corteActivo = CortesCaja::where('id_trabajador', $trabajadorId)
             ->where('estatus', 'ABIERTO')
             ->orderBy('id_corte', 'desc')
             ->first();
 
-        // Historial de los últimos 25 cortes de caja para mostrar en la tabla del modal
         $historialCortes = CortesCaja::orderBy('id_corte', 'desc')
             ->limit(25)
             ->get();
@@ -132,7 +148,8 @@ class PagosController extends Controller
             'tomasBuscadas', 'toma', 'cuotaPeriodo', 'busqueda', 
             'facturasPendientes', 'alertaContrato', 'ingresosHoy', 
             'pagosHoyCount', 'adeudosPrevios', 'folioSugerido', 
-            'corteActivo', 'historialCortes', 'ultimaLectura'
+            'corteActivo', 'historialCortes', 'ultimaLectura',
+            'lecturasMedidor', 'tarifasMedidor'
         ));
     }
 
@@ -146,7 +163,6 @@ class PagosController extends Controller
 
         $trabajadorId = Auth::id() ?? 1;
 
-        // Evitar duplicar si ya tiene una caja abierta
         $yaAbierta = CortesCaja::where('id_trabajador', $trabajadorId)
             ->where('estatus', 'ABIERTO')
             ->exists();
@@ -244,7 +260,6 @@ class PagosController extends Controller
 
         DB::beginTransaction();
         try {
-            // Verificar o crear corte abierto automáticamente para que nunca falle por corte_id
             $corteId = null;
             if (Schema::hasTable('cortes_caja')) {
                 $corteActivo = DB::table('cortes_caja')
@@ -316,17 +331,21 @@ class PagosController extends Controller
                     }
                 }
 
-                // Armar motivo de condonación incluyendo los años perdonados
                 if ($request->monto_condonado > 0 || !empty($request->anios_condonados)) {
                     $detalleAnios = $request->anios_condonados ? "Años condonados: {$request->anios_condonados}. " : "";
                     $motivoDesc = trim($detalleAnios . ($request->motivo_condonacion ?? 'Condonación por ley'));
                 }
 
-                $excedente = $request->monto_excedente ?? 0;
+                // Si hay cobro por excedente de medidor, sumar también su 25% de saneamiento y 5% de infraestructura
+                $excedente = floatval($request->monto_excedente ?? 0);
+                if ($excedente > 0) {
+                    $saneamiento += ($excedente * 0.25);
+                    $infraestructura += ($excedente * 0.05);
+                }
+
                 $cuotaBaseAguaTotal = $cuotaBase + $excedente;
                 $subtotalCalc = $cuotaBaseAguaTotal + $saneamiento + $infraestructura + $reconexion + ($request->rezagos ?? 0) + ($request->recargos ?? 0) + ($request->sancion ?? 0);
 
-                // Insertar directamente con DB::table para evitar errores de $fillable en el modelo
                 $idFactura = DB::table('facturas')->insertGetId([
                     'toma_id'                      => $toma->id_toma,
                     'id_tarifa'                    => $cuotaPeriodo->id_cuota_periodo,
@@ -364,7 +383,6 @@ class PagosController extends Controller
                 $factura = DB::table('facturas')->where('id_factura', $idFactura)->first();
 
             } else {
-                // Pago de factura pendiente existente
                 DB::table('facturas')->where('id_factura', $tipoCobro)->update([
                     'no_factura'             => $request->no_factura,
                     'estatus_pago'           => 'PAGADA',
@@ -378,7 +396,6 @@ class PagosController extends Controller
                 $factura = DB::table('facturas')->where('id_factura', $tipoCobro)->first();
             }
 
-            // Registrar en pagos_facturas o pagos_historial (compatible con ambas)
             $tablaPagos = Schema::hasTable('pagos_facturas') ? 'pagos_facturas' : 'pagos_historial';
             $datosPago = [
                 'factura_id'    => $factura->id_factura,
@@ -400,14 +417,12 @@ class PagosController extends Controller
 
             DB::table($tablaPagos)->insert($datosPago);
 
-            // Actualizar el acumulado en cortes_caja si existe corte abierto
             if ($corteId && Schema::hasTable('cortes_caja')) {
                 DB::table('cortes_caja')->where('id_corte', $corteId)->increment('total_cobrado_sistema', $factura->total_factura);
             }
 
             DB::commit();
 
-            $localidadNombre = 'ACATIC';
             $localidadNombre = 'ACATIC';
             if (Schema::hasTable('localidades') && Schema::hasColumn('localidades', 'nombre_localidad')) {
                 $loc = DB::table('localidades')->where('id_localidad', $toma->id_localidad)->value('nombre_localidad');
@@ -432,4 +447,160 @@ class PagosController extends Controller
             return back()->with('error', 'Error al generar el cobro: ' . $e->getMessage());
         }
     }
+    // GENERAR REPORTE DE CORTE POR RANGO DE FECHAS (SOPORTA MILES DE REGISTROS SIN ERROR 500)
+    public function generarReporteCorte(Request $request)
+    {
+        ini_set('memory_limit', '1024M');
+        set_time_limit(300);
+
+        $request->validate([
+            'fecha_inicio'      => 'required|date',
+            'fecha_fin'         => 'required|date',
+            'tipo_reporte'      => 'required|in:desglosado,concentrado',
+            'alcance_cajero'    => 'nullable|string',
+            'forma_pago_filtro' => 'nullable|string',
+        ]);
+
+        $fechaInicio = Carbon::parse($request->fecha_inicio)->startOfDay();
+        $fechaFin    = Carbon::parse($request->fecha_fin)->endOfDay();
+        $tipoReporte = $request->tipo_reporte;
+        $formaFiltro = $request->input('forma_pago_filtro', 'TODAS');
+        $alcance     = $request->input('alcance_cajero', $request->input('_alcance_cajero', 'todos'));
+
+        $tablaPagos = Schema::hasTable('pagos_facturas') ? 'pagos_facturas' : 'pagos_historial';
+
+        $baseQuery = DB::table($tablaPagos . ' as p')
+            ->join('facturas as f', 'p.factura_id', '=', 'f.id_factura')
+            ->whereBetween('p.fecha_pago', [$fechaInicio->toDateString(), $fechaFin->toDateString()])
+            ->where('p.estatus_pago', 'VALIDO');
+
+        $nombreOperador = 'TODOS LOS OPERADORES';
+        if ($alcance === 'actual' && Auth::check()) {
+            $baseQuery->where('p.id_trabajador', Auth::id());
+            $nombreOperador = strtoupper(Auth::user()->nombre ?? Auth::user()->usuario_trabajador ?? 'OPERADOR');
+        } elseif (Auth::check()) {
+            $nombreOperador = strtoupper(Auth::user()->nombre ?? Auth::user()->usuario_trabajador ?? 'ADMINISTRADOR');
+        }
+
+        if ($formaFiltro !== 'TODAS') {
+            $baseQuery->where('p.forma_pago', $formaFiltro);
+        }
+
+        // 1. Totales calculados directamente en MySQL
+        $resumenSql = (clone $baseQuery)->selectRaw("
+            COUNT(p.id_pago) as cantidad_recibos,
+            COALESCE(SUM(f.cuota_base_agua), 0) as agua,
+            COALESCE(SUM(f.saneamiento), 0) as saneamiento,
+            COALESCE(SUM(f.infraestructura), 0) as infraestructura,
+            COALESCE(SUM(f.reconexion), 0) as reconexion,
+            COALESCE(SUM(f.rezagos), 0) as rezagos,
+            COALESCE(SUM(f.recargos), 0) as recargos,
+            COALESCE(SUM(f.sancion), 0) as sancion,
+            COALESCE(SUM(COALESCE(f.descuento_social, 0) + COALESCE(f.descuento_pronto_pago, 0) + COALESCE(f.bonificacion, 0)), 0) as descuentos,
+            COALESCE(SUM(CASE WHEN p.forma_pago = 'EFECTIVO' THEN p.monto_pagado ELSE 0 END), 0) as efectivo,
+            COALESCE(SUM(CASE WHEN p.forma_pago = 'TARJETA' THEN p.monto_pagado ELSE 0 END), 0) as tarjeta,
+            COALESCE(SUM(CASE WHEN p.forma_pago = 'TRANSFERENCIA' THEN p.monto_pagado ELSE 0 END), 0) as transferencia,
+            COALESCE(SUM(p.monto_pagado), 0) as gran_total
+        ")->first();
+
+        $totales = [
+            'cantidad_recibos' => (int) ($resumenSql->cantidad_recibos ?? 0),
+            'agua'             => (float) ($resumenSql->agua ?? 0),
+            'saneamiento'      => (float) ($resumenSql->saneamiento ?? 0),
+            'infraestructura'  => (float) ($resumenSql->infraestructura ?? 0),
+            'reconexion'       => (float) ($resumenSql->reconexion ?? 0),
+            'rezagos'          => (float) ($resumenSql->rezagos ?? 0),
+            'recargos'         => (float) ($resumenSql->recargos ?? 0),
+            'sancion'          => (float) ($resumenSql->sancion ?? 0),
+            'descuentos'       => (float) ($resumenSql->descuentos ?? 0),
+            'efectivo'         => (float) ($resumenSql->efectivo ?? 0),
+            'tarjeta'          => (float) ($resumenSql->tarjeta ?? 0),
+            'transferencia'    => (float) ($resumenSql->transferencia ?? 0),
+            'gran_total'       => (float) ($resumenSql->gran_total ?? 0),
+        ];
+
+        $registros = collect();
+        $concentradoPorDia = collect();
+
+        if ($tipoReporte === 'desglosado') {
+            $registros = (clone $baseQuery)
+                ->leftJoin('tomas_agua as t', 'f.toma_id', '=', 't.id_toma')
+                ->leftJoin('usuarios as u', 't.usuario_id', '=', 'u.id_usuario')
+                ->select(
+                    'p.fecha_pago',
+                    'p.monto_pagado',
+                    'p.forma_pago',
+                    'f.no_factura',
+                    'f.toma_id',
+                    'f.periodo_anio',
+                    'f.periodo_mes',
+                    'f.cuota_base_agua',
+                    'f.saneamiento',
+                    'f.infraestructura',
+                    DB::raw('(COALESCE(f.reconexion,0) + COALESCE(f.rezagos,0) + COALESCE(f.recargos,0) + COALESCE(f.sancion,0)) as otros_cargos'),
+                    DB::raw('(COALESCE(f.descuento_social,0) + COALESCE(f.descuento_pronto_pago,0) + COALESCE(f.bonificacion,0)) as descuento_fila'),
+                    'u.razon_social',
+                    'u.apellidos',
+                    't.calle',
+                    't.numero_exterior'
+                )
+                ->orderBy('p.fecha_pago', 'asc')
+                ->orderBy('p.id_pago', 'asc')
+                ->get();
+        } else {
+            $concentradoPorDia = (clone $baseQuery)
+                ->selectRaw("
+                    DATE(p.fecha_pago) as fecha_raw,
+                    COUNT(p.id_pago) as recibos,
+                    COALESCE(SUM(f.cuota_base_agua), 0) as agua,
+                    COALESCE(SUM(f.saneamiento), 0) as saneamiento,
+                    COALESCE(SUM(f.infraestructura), 0) as infraestructura,
+                    COALESCE(SUM(COALESCE(f.reconexion,0) + COALESCE(f.rezagos,0) + COALESCE(f.recargos,0) + COALESCE(f.sancion,0)), 0) as accesorios,
+                    COALESCE(SUM(COALESCE(f.descuento_social,0) + COALESCE(f.descuento_pronto_pago,0) + COALESCE(f.bonificacion,0)), 0) as descuentos,
+                    COALESCE(SUM(p.monto_pagado), 0) as total_dia
+                ")
+                ->groupBy(DB::raw('DATE(p.fecha_pago)'))
+                ->orderBy('fecha_raw', 'asc')
+                ->get()
+                ->map(function ($fila) {
+                    return [
+                        'fecha'           => Carbon::parse($fila->fecha_raw)->format('d/m/Y'),
+                        'recibos'         => $fila->recibos,
+                        'agua'            => $fila->agua,
+                        'saneamiento'     => $fila->saneamiento,
+                        'infraestructura' => $fila->infraestructura,
+                        'accesorios'      => $fila->accesorios,
+                        'descuentos'      => $fila->descuentos,
+                        'total_dia'       => $fila->total_dia,
+                    ];
+                });
+        }
+
+        Carbon::setLocale('es');
+        $periodoTexto = 'Periodo del: ' . strtoupper($fechaInicio->translatedFormat('d M Y')) . '  al: ' . strtoupper($fechaFin->translatedFormat('d M Y'));
+
+        // Si son más de 300 recibos en modo Desglosado, usamos el motor PDF nativo del navegador para que cargue en 1 segundo
+        $modoImpresionDirecta = ($tipoReporte === 'desglosado' && $totales['cantidad_recibos'] > 300);
+
+        $datosPdf = [
+            'registros'            => $registros,
+            'totales'              => $totales,
+            'concentradoPorDia'    => $concentradoPorDia,
+            'tipoReporte'          => $tipoReporte,
+            'nombreOperador'       => $nombreOperador,
+            'periodoTexto'         => $periodoTexto,
+            'formaFiltro'          => $formaFiltro,
+            'fechaImpresion'       => now()->format('d/m/Y H:i'),
+            'modoImpresionDirecta' => $modoImpresionDirecta,
+        ];
+
+        if ($modoImpresionDirecta) {
+            return view('pagos.reporte_corte_pdf', $datosPdf);
+        }
+
+        $orientacion = ($tipoReporte === 'desglosado') ? 'landscape' : 'portrait';
+        $pdf = Pdf::loadView('pagos.reporte_corte_pdf', $datosPdf)->setPaper('letter', $orientacion);
+        return $pdf->stream('Reporte_Corte_' . $fechaInicio->format('dmY') . '_' . $fechaFin->format('dmY') . '.pdf');
+    }
+
 }

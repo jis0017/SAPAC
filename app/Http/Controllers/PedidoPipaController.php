@@ -131,7 +131,7 @@ class PedidoPipaController extends Controller
         return redirect()->route('pedidos.pipas')->with('success', 'Solicitud de pipa eliminada correctamente.');
     }
 
-    public function verificarSolvencia(Request $request)
+   public function verificarSolvencia(Request $request)
     {
         $query = trim($request->input('query'));
         
@@ -168,10 +168,22 @@ class PedidoPipaController extends Controller
 
         // 4. Formatear la lista de resultados para enviarla a JavaScript
         $resultados = $tomas->map(function($toma) {
+            // 1. Revisar si tiene facturas explícitamente en estado PENDIENTE
             $totalDeuda = DB::table('facturas')
                 ->where('toma_id', $toma->id_toma)
                 ->where('estatus_pago', 'PENDIENTE')
                 ->sum('total_factura');
+
+            // 2. Identificar cuál fue el último año que se registró
+            $ultimoAnio = DB::table('facturas')
+                ->where('toma_id', $toma->id_toma)
+                ->max('periodo_anio');
+
+            // EL AÑO ACTUAL DINÁMICO
+            $anioActual = date('Y'); 
+
+            // LOGICA: Está al corriente SOLO SI la deuda es cero Y su último pago cubre el año en curso
+            $alCorriente = ($totalDeuda <= 0) && ($ultimoAnio >= $anioActual);
 
             // Solo nombre / razón social sin apellidos duplicados
             $nombreCiudadano = trim($toma->usuario->razon_social ?? '');
@@ -186,7 +198,7 @@ class PedidoPipaController extends Controller
                 'telefono'           => $toma->usuario->telefono ?? '',
                 'tipo_propiedad'     => $toma->tipoPredio->nombre_predio ?? 'DOMÉSTICO',
                 'direccion_completa' => strtoupper($direccion),
-                'al_corriente'       => ($totalDeuda <= 0),
+                'al_corriente'       => $alCorriente,
                 'total_deuda'        => $totalDeuda
             ];
         });
@@ -201,11 +213,8 @@ class PedidoPipaController extends Controller
     {
         $user = $request->user();
 
-        // Cargamos la toma y TODOS los pedidos asignados a este pipero, 
-        // sin importar si están pendientes, en camino, entregados o cancelados.
         $pedidos = PedidoPipa::with(['toma'])
             ->where('id_trabajador', $user->id_trabajador)
-            // Se quitó el whereIn de estados para que lleguen al historial
             ->orderBy('fecha_entrega', 'desc')
             ->get();
 
@@ -215,42 +224,73 @@ class PedidoPipaController extends Controller
         ]);
     }
 
-    public function actualizarEstadoMobile(Request $request, $id)
-{
-    $request->validate([
-        'estado_entrega' => 'required|in:Pendiente,En camino,Entregado,Cancelado',
-        'latitud'        => 'nullable|numeric',
-        'longitud'       => 'nullable|numeric',
-    ]);
+public function actualizarEstadoMobile(Request $request, $id)
+    {
+        $request->validate([
+            'estado_entrega' => 'required|in:Pendiente,En camino,Entregado,Cancelado',
+            'latitud'        => 'nullable|numeric',
+            'longitud'       => 'nullable|numeric',
+        ]);
 
-    $user = $request->user();
-    $pedido = PedidoPipa::where('id_pedido', $id)
-        ->where('id_trabajador', $user->id_trabajador)
-        ->first();
+        $user = $request->user();
+        $pedido = PedidoPipa::where('id_pedido', $id)
+            ->where('id_trabajador', $user->id_trabajador)
+            ->first();
 
-    if (!$pedido) {
-        return response()->json(['success' => false, 'message' => 'Pedido no encontrado.'], 404);
-    }
+        if (!$pedido) {
+            return response()->json(['success' => false, 'message' => 'Pedido no encontrado.'], 404);
+        }
 
-    // Actualizamos el estatus del pedido
-    $pedido->update([
-        'estado_entrega' => $request->estado_entrega,
-        'fecha_entrega'  => $request->estado_entrega === 'Entregado' ? now() : $pedido->fecha_entrega,
-    ]);
+        // Guardamos la hora exacta tanto al entregar como al cancelar para calcular "Hace X minutos"
+        $pedido->update([
+            'estado_entrega' => $request->estado_entrega,
+            'fecha_entrega'  => in_array($request->estado_entrega, ['Entregado', 'Cancelado']) ? now() : $pedido->fecha_entrega,
+        ]);
 
-    // SI EL PEDIDO TIENE UNA TOMA ASOCIADA Y EL CELULAR MANDÓ COORDENADAS:
-    // Guardamos la ubicación de forma permanente en la toma de agua ("Aprende la ubicación")
-    if ($request->filled('latitud') && $request->filled('longitud') && !empty($pedido->toma_id)) {
-        \App\Models\TomasAgua::where('id_toma', $pedido->toma_id)->update([
-            'latitud'  => $request->latitud,
-            'longitud' => $request->longitud,
+        if ($request->filled('latitud') && $request->filled('longitud') && !empty($pedido->toma_id)) {
+            \App\Models\TomasAgua::where('id_toma', $pedido->toma_id)->update([
+                'latitud'  => $request->latitud,
+                'longitud' => $request->longitud,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Estatus actualizado y ubicación guardada en el padrón.',
+            'pedido'  => $pedido
         ]);
     }
 
-    return response()->json([
-        'success' => true,
-        'message' => 'Estatus actualizado y ubicación guardada en el padrón.',
-        'pedido'  => $pedido
-    ]);
-}
+    public function obtenerNotificaciones()
+    {
+        Carbon::setLocale('es');
+
+        $notificaciones = PedidoPipa::with('trabajador')
+            ->whereIn('estado_entrega', ['Entregado', 'Cancelado'])
+            ->whereNotNull('fecha_entrega')
+            ->orderBy('fecha_entrega', 'desc')
+            ->limit(8)
+            ->get()
+            ->map(function ($pipa) {
+                $esEntregado = ($pipa->estado_entrega === 'Entregado');
+
+                return [
+                    'id_pedido' => $pipa->id_pedido,
+                    'estado'    => $pipa->estado_entrega,
+                    'titulo'    => $esEntregado 
+                                    ? "Pipa #{$pipa->id_pedido} Entregada" 
+                                    : "Pipa #{$pipa->id_pedido} Cancelada",
+                    'detalle'   => "{$pipa->solicitante} · {$pipa->domicilio_entrega}",
+                    'pipero'    => $pipa->trabajador->nombre ?? 'Operador móvil',
+                    'tiempo'    => Carbon::parse($pipa->fecha_entrega)->diffForHumans(),
+                    'marca_id'  => $pipa->id_pedido . '_' . $pipa->estado_entrega . '_' . strtotime($pipa->fecha_entrega),
+                    'url'       => route('pedidos.pipas', ['buscar' => $pipa->id_pedido]),
+                ];
+            });
+
+        return response()->json([
+            'success'        => true,
+            'notificaciones' => $notificaciones
+        ]);
+    }
 }

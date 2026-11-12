@@ -38,6 +38,8 @@ Route::middleware(['auth'])->group(function () {
 
     // 🟢 MÓDULO ADMINISTRATIVO (Ingenieros y Secretarias)
     Route::middleware(['role:Ingeniero,Secretaria'])->group(function () {
+        //Notificaciones
+        Route::get('/api/notificaciones-pipas', [PedidoPipaController::class, 'obtenerNotificaciones'])->name('notificaciones.pipas');
         // Gestión de Usuarios
         Route::get('/usuarios', [UsuariosController::class, 'index'])->name('usuarios.index');
         Route::get('/usuarios/{id}', [UsuariosController::class, 'show'])->name('usuarios.show');
@@ -61,6 +63,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/pagos/caja/cerrar', [PagosController::class, 'cerrarCaja'])->name('pagos.cerrarCaja');
         Route::get('/pagos/pdf/{toma_id}/{anio}', [PagosController::class, 'GenerarPdf'])->name('pagos.GenerarPdf');
         Route::get('/pagos/recibo/{toma_id}/{anio}', [PagosController::class, 'GenerarRecibo'])->name('pagos.GenerarRecibo');
+        Route::get('/pagos/reporte-corte', [PagosController::class, 'generarReporteCorte'])->name('pagos.reporteCorte');
         
         // Gestión de Pedidos de Pipas
         Route::get('/pedidos-pipa', [PedidoPipaController::class, 'index'])->name('pedidos.pipas');
@@ -75,6 +78,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/medidores/guardar-lectura/{toma_id}', [CalculosController::class, 'guardarLectura'])->name('calculos_medidor.guardar_lectura');
         Route::get('/medidores/pdf/{toma_id}/{anio}', [CalculosController::class, 'GenerarPdf'])->name('calculos_medidor.GenerarPdf');
         Route::post('/medidores/facturar/{toma_id}/{anio}', [CalculosController::class, 'facturarExcedente'])->name('calculos_medidor.facturar');
+        Route::delete('/medidores/eliminar-lectura/{toma_id}', [App\Http\Controllers\CalculosController::class, 'eliminarLectura'])->name('calculos_medidor.eliminar_lectura');
+        
 
         // Gestión de Trabajadores
         Route::get('/trabajadores', [TrabajadoresController::class, 'index'])->name('trabajadores.trabajadores');

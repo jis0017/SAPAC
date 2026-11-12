@@ -56,17 +56,31 @@ class TomaAguaController extends Controller
                 $query->where('estatus', 'BAJA')->orderBy('id_toma', 'desc');
                 break;
                 
-            // NUEVOS CASOS DE SOLVENCIA
             case 'con_adeudo':
-                // Traer tomas que TENGAN al menos una factura en estado PENDIENTE
-                $query->whereHas('historialPagos', function($q) {
-                    $q->where('estatus_pago', 'PENDIENTE');
+                $anioActual = date('Y'); // Toma el año en curso del servidor automáticamente
+                
+                $query->where(function($q) use ($anioActual) {
+                    // 1. Tiene facturas explícitamente pendientes de pagar
+                    $q->whereHas('historialPagos', function($sq) {
+                        $sq->where('estatus_pago', 'PENDIENTE');
+                    })
+                    // 2. O su último registro pagado es de un año anterior al actual
+                    ->orWhereDoesntHave('historialPagos', function($sq) use ($anioActual) {
+                        $sq->where('periodo_anio', '>=', $anioActual);
+                    });
                 })->orderBy('id_toma', 'desc');
                 break;
+
             case 'al_corriente':
-                // Traer tomas que NO TENGAN facturas en estado PENDIENTE
-                $query->whereDoesntHave('historialPagos', function($q) {
-                    $q->where('estatus_pago', 'PENDIENTE');
+                $anioActual = date('Y');
+                
+                // 1. NO tiene facturas pendientes de ningún tipo
+                $query->whereDoesntHave('historialPagos', function($sq) {
+                    $sq->where('estatus_pago', 'PENDIENTE');
+                })
+                // 2. Y SÍ tiene al menos un pago registrado que cubra el año en curso
+                ->whereHas('historialPagos', function($sq) use ($anioActual) {
+                    $sq->where('periodo_anio', '>=', $anioActual);
                 })->orderBy('id_toma', 'desc');
                 break;
 
@@ -238,9 +252,18 @@ class TomaAguaController extends Controller
                 ->orderBy('facturas.id_factura', 'desc')
                 ->get();
 
-            $tieneAdeudo = $facturas->contains(function ($factura) {
+            $anioActual = date('Y');
+            
+            // 1. Verificar si tiene facturas explícitamente en estado PENDIENTE
+            $tieneFacturasPendientes = $facturas->contains(function ($factura) {
                 return strtoupper($factura->estatus_pago) === 'PENDIENTE';
             });
+            
+            // 2. Encontrar el año más reciente de una factura pagada
+            $ultimoAnioPagado = $facturas->where('estatus_pago', 'PAGADA')->max('periodo_anio');
+
+            // LOGICA: Tiene adeudo si tiene facturas pendientes o si su último año pagado es menor al año actual (o no tiene pagos)
+            $tieneAdeudo = $tieneFacturasPendientes || ($ultimoAnioPagado === null) || ($ultimoAnioPagado < $anioActual);
 
             $historial = $facturas->map(function($factura) {
                 return [

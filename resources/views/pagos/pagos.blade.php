@@ -4,7 +4,7 @@
 @section('content')
 <div class="container-fluid py-2">
   <!-- ENCABEZADO Y BUSCADOR COMPACTO -->
-  <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 pb-2 border-bottom">
     <div class="d-flex align-items-center">
       <div class="bg-primary bg-opacity-10 text-primary p-2 rounded me-3">
         <i class="bi bi-cash-stack fs-4"></i>
@@ -14,9 +14,18 @@
         <h1 class="h5 fw-bold text-dark mb-0">Ventanilla de Cobro SAPAC</h1>
       </div>
     </div>
-    <button class="btn {{ isset($corteActivo) && $corteActivo ? 'btn-outline-success' : 'btn-outline-danger' }} fw-bold px-3 py-1 border-2" data-bs-toggle="modal" data-bs-target="#modalCaja">
-      <i class="bi bi-safe me-1"></i> {{ isset($corteActivo) && $corteActivo ? 'Estado / Corte de Caja' : 'Abrir Caja del Día' }}
-    </button>
+
+    <div class="d-flex flex-wrap gap-2">
+      <!-- NUEVO BOTÓN: REPORTES DE CORTE POR FECHAS -->
+      <button type="button" class="btn btn-outline-primary fw-bold px-3 py-1 border-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalReporteCorte">
+        <i class="bi bi-file-earmark-bar-graph me-1"></i> Reportes / Corte por Fechas
+      </button>
+
+      <!-- BOTÓN DE APERTURA / CORTE DE CAJA -->
+      <button type="button" class="btn {{ isset($corteActivo) && $corteActivo ? 'btn-outline-success' : 'btn-outline-danger' }} fw-bold px-3 py-1 border-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalCaja">
+        <i class="bi bi-safe me-1"></i> {{ isset($corteActivo) && $corteActivo ? 'Estado / Corte de Caja' : 'Abrir Caja del Día' }}
+      </button>
+    </div>
   </div>
 
   <!-- ALERTAS VISIBLES POR SI OCURRE UN ERROR EN EL CONTROLADOR -->
@@ -353,6 +362,7 @@
       </div>
     </div>
   </div>
+  
 
   @if(session('success'))
   <div class="modal fade" id="modalExitoGlobal" tabindex="-1" aria-hidden="true">
@@ -542,212 +552,127 @@
         </div>
       </div>
     </div>
+  </div>  
+</div>
+
+<!-- ========================================================================= -->
+  <!-- MODAL: REPORTE DE CORTE POR RANGO DE FECHAS (ESTILO SICALTA MEJORADO)     -->
+  <!-- ========================================================================= -->
+  <div class="modal fade" id="modalReporteCorte" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 480px;">
+      <div class="modal-content border-0 shadow-lg rounded-4">
+        <div class="modal-header border-bottom py-3 px-4 bg-light">
+          <div class="d-flex align-items-center">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-3 me-3">
+              <i class="bi bi-printer-fill fs-5"></i>
+            </div>
+            <div>
+              <h5 class="modal-title fw-bold text-dark mb-0">Reporte de Corte por Fechas</h5>
+              <small class="text-muted">Generación de PDF Desglosado o Concentrado</small>
+            </div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <form action="{{ route('pagos.reporteCorte') }}" method="GET" target="_blank">
+          <div class="modal-body p-4">
+            
+            <!-- 1. RANGO DE FECHAS -->
+            <h6 class="fw-bold text-primary small text-uppercase mb-2">
+              <i class="bi bi-calendar-range me-1"></i>1. Digite Rango de Fechas
+            </h6>
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <label class="form-label small fw-bold text-muted mb-1">Fecha Inicial:</label>
+                <input type="date" name="fecha_inicio" class="form-control form-control-sm fw-bold border-primary" value="{{ date('Y-m-01') }}" required>
+              </div>
+              <div class="col-6">
+                <label class="form-label small fw-bold text-muted mb-1">Fecha Final:</label>
+                <input type="date" name="fecha_fin" class="form-control form-control-sm fw-bold border-primary" value="{{ date('Y-m-d') }}" required>
+              </div>
+            </div>
+
+            <hr class="my-3">
+
+            <!-- 2. OPCIONES DE REPORTE (DESGLOSADO / CONCENTRADO) -->
+            <h6 class="fw-bold text-primary small text-uppercase mb-2">
+              <i class="bi bi-sliders me-1"></i>2. Opciones de Visualización
+            </h6>
+            <div class="p-3 rounded-3 border bg-light mb-3">
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="radio" name="tipo_reporte" id="repDesglosado" value="desglosado" checked>
+                <label class="form-check-label fw-bold text-dark" for="repDesglosado">
+                  Desglosado (Detallado por Factura / Recibo)
+                  <small class="d-block text-muted fw-normal">Muestra cada pago individual, toma, titular, conceptos y total.</small>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="tipo_reporte" id="repConcentrado" value="concentrado">
+                <label class="form-check-label fw-bold text-dark" for="repConcentrado">
+                  Concentrado (Resumen Contable y por Día)
+                  <small class="d-block text-muted fw-normal">Totales acumulados por rubro (Agua, Saneamiento, Infraestructura, Recargos) y por fecha.</small>
+                </label>
+              </div>
+            </div>
+
+            <!-- 3. FILTROS ADICIONALES (CAJERO Y FORMA DE PAGO) -->
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="form-label small fw-bold text-muted mb-1">Operador / Cajero:</label>
+                <select name="alcance_cajero" class="form-select form-select-sm fw-semibold">
+                  <option value="todos">Todos los Cajeros</option>
+                  <option value="actual">Solo mi usuario ({{ Auth::user()->nombre ?? 'Actual' }})</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label small fw-bold text-muted mb-1">Forma de Pago:</label>
+                <select name="forma_pago_filtro" class="form-select form-select-sm fw-semibold">
+                  <option value="TODAS">Todas las Formas</option>
+                  <option value="EFECTIVO">Solo Efectivo</option>
+                  <option value="TARJETA">Solo Tarjeta</option>
+                  <option value="TRANSFERENCIA">Solo Transferencia</option>
+                </select>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-between">
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 fw-bold" data-bs-dismiss="modal">
+              Cancelar
+            </button>
+            <button type="submit" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold shadow-sm">
+              <i class="bi bi-file-earmark-pdf-fill me-1"></i> Generar PDF
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
-  <!-- JAVASCRIPT -->
-  <script>
-    let subtotalSinExtras = 0;
-    let descuentoActual = 0;
-
-    function syncFormaPago() {
-        document.getElementById('inputFormFormaPago').value = document.getElementById('formaPagoInput').value;
-    }
-
-    function togglePanelCondonacion() {
-        let panel = document.getElementById('panelCondonacionAnios');
-        panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
-    }
-
-    function calcularPerdonAnios(costoAnual) {
-        let cantAnios = parseInt(document.getElementById('inputCantAniosPerdonar').value) || 0;
-        let montoPerdonado = cantAnios * parseFloat(costoAnual || 0);
-        // Al perdonar años atrasados, se registra el monto condonado en la factura
-        document.getElementById('inputCondonacionMontoVis').value = montoPerdonado.toFixed(2);
-        sincronizarCondonacion();
-    }
-
-    function sincronizarCondonacion() {
-        let montoCondonado = parseFloat(document.getElementById('inputCondonacionMontoVis').value) || 0;
-        let aniosTexto = document.getElementById('inputAniosTexto').value || '';
-        let motivoTexto = document.getElementById('inputMotivoCondonacionVis').value || '';
-
-        document.getElementById('inputFormCondonacionMonto').value = montoCondonado;
-        document.getElementById('inputFormAniosCondonados').value = aniosTexto;
-        document.getElementById('inputFormMotivoCondonacion').value = motivoTexto;
-        recalcularTotal();
-    }
-
-    function forzarOpcionPeriodos() {
-        let radioPeriodos = document.getElementById('cobroPeriodos');
-        if(radioPeriodos && !radioPeriodos.checked) {
-            radioPeriodos.checked = true;
-        }
-        calcularCanva();
-    }
-
-    function calcularConsumo() {
-        let lecAnt = parseInt(document.getElementById('inputLecAnt').value) || 0;
-        let lecAct = parseInt(document.getElementById('inputLecAct').value) || 0;
-        let consumo = lecAct - lecAnt;
-        if (consumo < 0) consumo = 0;
-        
-        document.getElementById('txtConsumo').innerText = consumo;
-        document.getElementById('inputConsumoOculto').value = consumo;
-    }
-
-    function recalcularTotal() {
-        let rezago = parseFloat(document.getElementById('inputRezagoManual').value) || 0;
-        let recargo = parseFloat(document.getElementById('inputRecargoManual').value) || 0;
-        let sancion = parseFloat(document.getElementById('inputSancionManual').value) || 0;
-        let excedente = parseFloat(document.getElementById('inputExcedente') ? document.getElementById('inputExcedente').value : 0) || 0;
-        let condonacion = parseFloat(document.getElementById('inputFormCondonacionMonto').value) || 0;
-
-        let descuentoTotal = descuentoActual + condonacion;
-        let txtDescuento = document.getElementById('txtDescuento');
-        if (txtDescuento) {
-            txtDescuento.innerText = (descuentoTotal > 0) ? '-$' + descuentoTotal.toFixed(2) : 'NO';
-        }
-
-        let nuevoTotal = subtotalSinExtras + excedente + rezago + recargo + sancion - descuentoTotal;
-        if (nuevoTotal < 0) nuevoTotal = 0;
-
-        document.getElementById('txtTotal').innerText = '$' + nuevoTotal.toFixed(2);
-        document.getElementById('inputTotalOculto').value = nuevoTotal.toFixed(2);
-    }
-
-    function calcularCanva() {
-        let cobroElegido = document.querySelector('input[name="tipo_cobro"]:checked');
-        if(!cobroElegido) return;
-
-        let tipoCobroValue = cobroElegido.value;
-        let inputLecAnt = document.getElementById('fechaLecAnt');
-        let inputLecAct = document.getElementById('fechaLecAct');
-        let currentYear = new Date().getFullYear();
-
-        if (tipoCobroValue === 'anualidad') {
-            inputLecAnt.value = currentYear + "-01-01";
-            inputLecAct.value = currentYear + "-12-31";
-        }
-        
-        let tipoParaElBackend = (tipoCobroValue === 'anualidad' || tipoCobroValue === 'periodos') ? 'periodos' : tipoCobroValue;
-        document.getElementById('inputFormTipoCobroReal').value = tipoParaElBackend;
-        
-        let fechaAnt = new Date(inputLecAnt.value + 'T00:00:00');
-        let fechaAct = new Date(inputLecAct.value + 'T00:00:00');
-        let meses = 1;
-        
-        if (!isNaN(fechaAnt) && !isNaN(fechaAct)) {
-            meses = (fechaAct.getFullYear() - fechaAnt.getFullYear()) * 12 + (fechaAct.getMonth() - fechaAnt.getMonth()) + 1;
-            if (meses < 1) meses = 1;
-        }
-        
-        let spanMeses = document.getElementById('spanMesesCobrados');
-        if (spanMeses) spanMeses.innerText = meses + " MES(ES)";
-
-        let isCobroPeriodico = (tipoCobroValue === 'anualidad' || tipoCobroValue === 'periodos');
-
-        let base = (parseFloat(cobroElegido.getAttribute('data-base')) || 0) * (isCobroPeriodico ? meses : 1);
-        let san = (parseFloat(cobroElegido.getAttribute('data-san')) || 0) * (isCobroPeriodico ? meses : 1);
-        let inf = (parseFloat(cobroElegido.getAttribute('data-inf')) || 0) * (isCobroPeriodico ? meses : 1);
-        let rec = parseFloat(cobroElegido.getAttribute('data-rec')) || 0;
-        
-        let descuentoManual = 0;
-        let cajaDescuentos = document.getElementById('cajaDescuentos');
-        let descElement = document.querySelector('input[name="select_descuento"]:checked');
-        let descElegido = descElement ? descElement.value : 'ninguno';
-        
-        if (isCobroPeriodico) {
-            cajaDescuentos.style.opacity = '1';
-            cajaDescuentos.style.pointerEvents = 'auto';
-            
-            let isAnual = (meses === 12);
-            document.getElementById('radioEneroDiv').classList.toggle('text-muted', !isAnual);
-            document.getElementById('radioMarzoDiv').classList.toggle('text-muted', !isAnual);
-
-            if (!isAnual && (descElegido === 'enero' || descElegido === 'marzo_abril')) {
-                document.querySelector('input#descNinguno').checked = true;
-                descElegido = 'ninguno';
-            }
-            document.getElementById('inputFormDescuento').value = descElegido;
-
-            if (descElegido === 'adulto_mayor') descuentoManual = base * 0.50; 
-            else if (descElegido === 'enero' && isAnual) descuentoManual = base * 0.15;
-            else if (descElegido === 'marzo_abril' && isAnual) descuentoManual = base * 0.05;
-        } else {
-            cajaDescuentos.style.opacity = '0.5';
-            cajaDescuentos.style.pointerEvents = 'none';
-            let descNinguno = document.querySelector('input#descNinguno');
-            if (descNinguno) descNinguno.checked = true;
-            document.getElementById('inputFormDescuento').value = 'ninguno';
-            descuentoManual = 0;
-        }
-
-        document.getElementById('txtBase').innerText = '$' + base.toFixed(2);
-        document.getElementById('txtSaneamiento').innerText = '$' + san.toFixed(2);
-        document.getElementById('txtInfra').innerText = '$' + inf.toFixed(2);
-        document.getElementById('txtRec').innerText = '$' + rec.toFixed(2);
-        document.getElementById('rowRec').style.display = (rec > 0) ? 'table-row' : 'none';
-        
-        descuentoActual = descuentoManual;
-
-        let inputRezago = document.getElementById('inputRezagoManual');
-        let inputSancion = document.getElementById('inputSancionManual');
-        
-        if (!isCobroPeriodico && tipoCobroValue !== 'contrato' && tipoCobroValue !== 'reconexion') {
-            if(inputRezago) {
-                inputRezago.value = parseFloat(cobroElegido.getAttribute('data-rez')).toFixed(2);
-                inputRezago.readOnly = true;
-            }
-            if(inputSancion) {
-                inputSancion.value = parseFloat(cobroElegido.getAttribute('data-sanc')).toFixed(2);
-                inputSancion.readOnly = true;
-            }
-            subtotalSinExtras = base + san + inf + rec; 
-        } else {
-            if(inputRezago) inputRezago.readOnly = false;
-            if(inputSancion) inputSancion.readOnly = false;
-            subtotalSinExtras = base + san + inf + rec;
-        }
-
-        recalcularTotal();
-    }
-
-    function verificarYEnviar() {
-        let tipoCobro = document.getElementById('inputFormTipoCobroReal').value;
-        if (!tipoCobro) return;
-        
-        let total = parseFloat(document.getElementById('inputTotalOculto').value) || 0;
-        document.getElementById('montoConfirmarModal').innerText = "$" + total.toFixed(2);
-        
-        let modalEl = document.getElementById('modalConfirmarPago');
-        let myModal = bootstrap.Modal.getOrCreateInstance(modalEl);
-        myModal.show();
-    }
-
-    function ejecutarPago() {
-        // 1. Envía el formulario hacia la pestaña nueva donde se genera el PDF
-        document.getElementById('formPago').submit();
-
-        // 2. Transforma el modal en "¡Operación Exitosa!" igual a tu vista de Tomas de Agua
-        document.getElementById('tituloModalPago').innerText = '¡Operación Exitosa!';
-        document.getElementById('subtituloModalPago').innerText = 'El pago ha sido registrado y la papeleta se generó correctamente.';
-        document.getElementById('botonesModalConfirmar').innerHTML = `
-            <button type="button" class="btn btn-primary rounded-pill px-5 py-2 fw-bold" style="background-color: #1a66ff;" onclick="window.location.reload()">Aceptar</button>
-        `;
-    }
-
-    document.addEventListener("DOMContentLoaded", function() {
-        setTimeout(() => {
-            calcularCanva();
-        }, 10);
-
-        @if(session('success'))
-            let modalExito = document.getElementById('modalExitoGlobal');
-            if (modalExito) {
-                new bootstrap.Modal(modalExito).show();
-            }
-        @endif
-    });
-  </script>
-</div>
 @endsection
+@push('scripts')
+@if(isset($toma) && $toma->calculo_fijo == 0)
+<script>
+    window.lecturasMedidorToma = @json($lecturasMedidor ?? []);
+    window.tarifasMedidorToma  = @json($tarifasMedidor ?? []);
+    window.configTomaMedida    = {
+        lectura_base: {{ $toma->lectura_base ?? 0 }},
+        franquicia_anual: {{ ($toma->aplica_franquicia_anual && $toma->volumen_franquicia_m3 > 0) ? $toma->volumen_franquicia_m3 : 144 }}
+    };
+</script>
+@endif
+
+<script src="{{ asset('assets/js/pagos.js') }}?v={{ time() }}"></script>
+
+@if(session('success'))
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        let modalExito = document.getElementById('modalExitoGlobal');
+        if (modalExito && typeof bootstrap !== 'undefined') {
+            new bootstrap.Modal(modalExito).show();
+        }
+    });
+</script>
+@endif
+@endpush

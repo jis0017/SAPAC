@@ -1723,29 +1723,165 @@ html:not([data-theme="dark"]):not([data-bs-theme="dark"]) .table thead th {
     transform: translateX(2px);
 }
 
+/* ==========================================================================
+   MÓDULO: CÁLCULOS DE MEDIDORES (TABLA Y MODAL HORIZONTAL)
+   ========================================================================== */
+.tabla-medidores {
+    width: 100%;
+    font-size: 0.9rem;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.tabla-medidores th, 
+.tabla-medidores td {
+    padding: 0.65rem 0.25rem;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #f1f5f9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tabla-medidores thead th {
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    background-color: #f8fafc;
+    border-bottom: 2px solid #cbd5e1;
+}
+.col-titular { width: 22%; }
+.col-resumen { width: 6.5%; font-size: 0.88rem; }
+.col-mes {
+    width: 4.87%;
+    font-family: 'Arial', sans-serif;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+.fila-seleccionable {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+.fila-seleccionable:hover td {
+    background-color: #dbeafe !important;
+}
+.nombre-titular {
+    font-weight: 800;
+    font-size: 0.88rem;
+    color: #0f172a;
+}
+.datos-titular {
+    font-size: 0.76rem;
+    color: #475569;
+}
+.select-anio-limpio {
+    padding-left: 0.85rem !important;
+    padding-right: 2.2rem !important;
+    background-position: right 0.65rem center !important;
+    min-width: 110px;
+}
 
- /* ESTILOS PARA TABLA LÍQUIDA Y ULTRA COMPACTA */
-    .tabla-medidores {
-        font-size: 0.75rem; /* Letra más pequeña para que quepa todo */
-        table-layout: fixed; /* Fuerza a la tabla a respetar el ancho de la pantalla */
-        width: 100%;
-    }
-    .tabla-medidores th, .tabla-medidores td {
-        padding: 0.25rem 0.1rem !important; /* Padding mínimo */
-        vertical-align: middle;
-        overflow: hidden; /* Evita que el contenido expanda la celda */
-        text-overflow: ellipsis; /* Puntos suspensivos si el texto es muy largo */
-        white-space: nowrap;
-    }
-    /* Anchos específicos en porcentajes para que siempre sumen 100% */
-    .col-titular { width: 14%; white-space: normal !important; line-height: 1; }
-    .col-lect-ant { width: 4%; }
-    .col-mes { width: 4.5%; } /* 12 meses * 4.5% = 54% */
-    .col-m3 { width: 5%; }
-    .col-exe { width: 5%; }
-    .col-med { width: 5%; }
-    .col-acciones { width: 7%; }
-
-    /* Reducción de tamaños en titular para ahorrar espacio */
-    .nombre-titular { font-size: 0.75rem; font-weight: bold; color: #333; margin-bottom: 2px; }
-    .datos-titular { font-size: 0.75rem; color: #6c757d; line-height: 1; }
+/* Modal Individual Horizontal (Ancho y Compacto) */
+.modal-medidor .modal-dialog {
+    max-width: 820px;
+}
+.modal-medidor .modal-content {
+    border: 0;
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 1rem 3rem rgba(15, 23, 42, .16);
+}
+.modal-medidor .modal-header {
+    padding: .85rem 1.25rem;
+    background: #f8fafc;
+}
+.modal-medidor .modal-body {
+    padding: 1.15rem 1.25rem;
+}
+.modal-medidor .modal-footer {
+    padding: .65rem 1.25rem;
+    background: #f8fafc;
+}
+.modal-medidor .resumen-indicador {
+    padding: .65rem .85rem;
+    background: #f8fafc;
+    border: 1px solid #e8edf3;
+    border-radius: .75rem;
+}
+.modal-medidor .resumen-etiqueta {
+    display: block;
+    margin-bottom: .15rem;
+    color: #64748b;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .035em;
+    text-transform: uppercase;
+}
+.modal-medidor .resumen-valor {
+    color: #172033;
+    font-size: 1.1rem;
+    font-weight: 800;
+    line-height: 1.2;
+}
+.modal-medidor .resumen-detalle {
+    display: block;
+    margin-top: .1rem;
+    color: #64748b;
+    font-size: .7rem;
+}
+.modal-medidor .titulo-seccion {
+    margin: 0;
+    color: #475569;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .035em;
+    text-transform: uppercase;
+}
+.modal-medidor .historial-lecturas {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: .7rem;
+    background: #fff;
+}
+.modal-medidor .lectura-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .5rem .75rem;
+    background: #fff;
+}
+.modal-medidor .lectura-item + .lectura-item {
+    border-top: 1px solid #edf1f5;
+}
+.modal-medidor .lectura-acciones {
+    display: flex;
+    flex-shrink: 0;
+    gap: .35rem;
+}
+.modal-medidor .lectura-acciones .btn {
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: .5rem;
+}
+.modal-medidor .formulario-lectura {
+    padding: .9rem;
+    border: 1px solid #e2e8f0;
+    border-radius: .8rem;
+    background: #fff;
+}
+.modal-medidor .form-label {
+    font-size: .75rem;
+    font-weight: 700;
+    color: #475569;
+    margin-bottom: .25rem;
+}
+.modal-medidor .panel-excedente {
+    padding: .85rem;
+    border: 1px solid rgba(220, 53, 69, .25);
+    border-radius: .8rem;
+    background: rgba(220, 53, 69, .055);
+}
