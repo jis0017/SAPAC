@@ -221,13 +221,13 @@ class PagosController extends Controller
         return back()->with('success', 'Corte de caja cerrado exitosamente.');
     }
 
-    // GUARDAR PAGO E IMPRIMIR PAPELETA
+   // GUARDAR PAGO E IMPRIMIR PAPELETA
     public function store(Request $request)
     {
         $request->validate([
             'toma_id'            => 'required|exists:tomas_agua,id_toma',
             'no_factura'         => 'required|string|max:50',
-            'tipo_cobro'         => 'required', 
+            'tipo_cobro'         => 'required',
             'forma_pago'         => 'required|string',
             'fecha_lec_ant'      => 'required|date',
             'fecha_lec_act'      => 'required|date',
@@ -245,7 +245,7 @@ class PagosController extends Controller
         ]);
 
         $toma = TomasAgua::with('usuario')->findOrFail($request->toma_id);
-        $tipoCobro = $request->tipo_cobro; 
+        $tipoCobro = $request->tipo_cobro;
         $trabajadorId = Auth::id() ?? 1;
 
         $cuotaPeriodo = DB::table('cuotas_periodo')
@@ -266,6 +266,7 @@ class PagosController extends Controller
                     ->where('id_trabajador', $trabajadorId)
                     ->where('estatus', 'ABIERTO')
                     ->orderBy('id_corte', 'desc')
+                    ->lockForUpdate()
                     ->first();
 
                 if ($corteActivo) {
@@ -293,8 +294,12 @@ class PagosController extends Controller
             if ($meses < 1) $meses = 1;
 
             if ($tipoCobro === 'periodos' || $tipoCobro === 'contrato' || $tipoCobro === 'reconexion') {
-                
-                $cuotaBase = 0; $saneamiento = 0; $infraestructura = 0; $descuento = 0; $reconexion = 0;
+
+                $cuotaBase = 0;
+                $saneamiento = 0;
+                $infraestructura = 0;
+                $descuento = 0;
+                $reconexion = 0;
                 $motivoDesc = null;
                 $esSoloContrato = 0;
                 $periodoMesTexto = 'ANUAL';
@@ -306,11 +311,11 @@ class PagosController extends Controller
                 } elseif ($tipoCobro === 'reconexion') {
                     $reconexion = $cuotaPeriodo->costo_reconexion;
                     $periodoMesTexto = 'RECONEXIÓN';
-                } else { 
-                    $cuotaBase = $cuotaPeriodo->cuota_mensual * $meses; 
-                    $saneamiento = ($cuotaPeriodo->saneamiento_mensual / 12) * $meses; 
-                    $infraestructura = ($cuotaPeriodo->otros_usos_mensual / 12) * $meses; 
-                    
+                } else {
+                    $cuotaBase = $cuotaPeriodo->cuota_mensual * $meses;
+                    $saneamiento = ($cuotaPeriodo->saneamiento_mensual / 12) * $meses;
+                    $infraestructura = ($cuotaPeriodo->otros_usos_mensual / 12) * $meses;
+
                     if ($meses == 12) {
                         $periodoMesTexto = 'ANUAL';
                     } else {
@@ -320,10 +325,10 @@ class PagosController extends Controller
                     }
 
                     if ($request->tipo_descuento === 'adulto_mayor') {
-                        $descuento = $cuotaBase * 0.50; 
+                        $descuento = $cuotaBase * 0.50;
                         $motivoDesc = 'INAPAM 50%';
                     } elseif ($request->tipo_descuento === 'enero' && $meses == 12) {
-                        $descuento = $cuotaBase * 0.15; 
+                        $descuento = $cuotaBase * 0.15;
                         $motivoDesc = 'Enero 15%';
                     } elseif ($request->tipo_descuento === 'marzo_abril' && $meses == 12) {
                         $descuento = $cuotaBase * 0.05;
@@ -336,8 +341,26 @@ class PagosController extends Controller
                     $motivoDesc = trim($detalleAnios . ($request->motivo_condonacion ?? 'Condonación por ley'));
                 }
 
-                // Si hay cobro por excedente de medidor, sumar también su 25% de saneamiento y 5% de infraestructura
+                // Validar excedente contra tarifas_config si hay consumo medido, o usar monto_excedente de lecturas_medidor
+                $consumoM3 = floatval($request->consumo ?? 0);
                 $excedente = floatval($request->monto_excedente ?? 0);
+
+                if ($toma->calculo_fijo == 0 && $consumoM3 > 0 && $excedente <= 0) {
+                    $rangoTarifa = DB::table('tarifas_config')
+                        ->where('id_tipo_predio', $toma->id_tipo_predio)
+                        ->where('limite_inferior', '<=', $consumoM3)
+                        ->where(function ($q) use ($consumoM3) {
+                            $q->where('limite_superior', '>=', $consumoM3)
+                              ->orWhereNull('limite_superior');
+                        })
+                        ->orderBy('anio_vigencia', 'desc')
+                        ->first();
+
+                    if ($rangoTarifa && floatval($rangoTarifa->precio_m3_excedente) > 0) {
+                        $excedente = round($consumoM3 * floatval($rangoTarifa->precio_m3_excedente), 2);
+                    }
+                }
+
                 if ($excedente > 0) {
                     $saneamiento += ($excedente * 0.25);
                     $infraestructura += ($excedente * 0.05);
@@ -345,6 +368,10 @@ class PagosController extends Controller
 
                 $cuotaBaseAguaTotal = $cuotaBase + $excedente;
                 $subtotalCalc = $cuotaBaseAguaTotal + $saneamiento + $infraestructura + $reconexion + ($request->rezagos ?? 0) + ($request->recargos ?? 0) + ($request->sancion ?? 0);
+
+                // Total calculado de forma segura en el servidor
+                $bonificacion = min(floatval($request->monto_condonado ?? 0), max(0, $subtotalCalc - $descuento));
+                $totalFacturaSeguro = max(0, round($subtotalCalc - $descuento - $bonificacion, 2));
 
                 $idFactura = DB::table('facturas')->insertGetId([
                     'toma_id'                      => $toma->id_toma,
@@ -365,16 +392,16 @@ class PagosController extends Controller
                     'sancion'                      => $request->sancion ?? 0,
                     'descuento_social'             => ($request->tipo_descuento === 'adulto_mayor') ? $descuento : 0,
                     'descuento_pronto_pago'        => in_array($request->tipo_descuento, ['enero', 'marzo_abril']) ? $descuento : 0,
-                    'bonificacion'                 => $request->monto_condonado ?? 0,
+                    'bonificacion'                 => $bonificacion,
                     'subtotal'                     => $subtotalCalc,
                     'iva'                          => 0,
-                    'total_factura'                => $request->total_factura, 
+                    'total_factura'                => $totalFacturaSeguro,
                     'periodo_anio'                 => $fechaAct->year,
                     'periodo_mes'                  => $periodoMesTexto,
                     'es_solo_contrato'             => $esSoloContrato,
                     'estatus_pago'                 => 'PAGADA',
                     'motivo_condonacion'           => $motivoDesc,
-                    'fecha_condonacion'            => ($request->monto_condonado > 0 || !empty($request->anios_condonados)) ? now() : null,
+                    'fecha_condonacion'            => ($bonificacion > 0 || !empty($request->anios_condonados)) ? now() : null,
                     'autorizado_por_trabajador_id' => $trabajadorId,
                     'created_at'                   => now(),
                     'updated_at'                   => now(),
@@ -383,7 +410,19 @@ class PagosController extends Controller
                 $factura = DB::table('facturas')->where('id_factura', $idFactura)->first();
 
             } else {
-                DB::table('facturas')->where('id_factura', $tipoCobro)->update([
+                $facturaExistente = DB::table('facturas')
+                    ->where('id_factura', $tipoCobro)
+                    ->where('toma_id', $toma->id_toma)
+                    ->where('estatus_pago', 'PENDIENTE')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$facturaExistente) {
+                    DB::rollBack();
+                    return back()->with('error', 'La factura seleccionada no pertenece a esta toma o ya fue pagada.');
+                }
+
+                DB::table('facturas')->where('id_factura', $facturaExistente->id_factura)->update([
                     'no_factura'             => $request->no_factura,
                     'estatus_pago'           => 'PAGADA',
                     'fecha_lectura_anterior' => $request->fecha_lec_ant,
@@ -393,7 +432,7 @@ class PagosController extends Controller
                     'consumo'                => $request->consumo ?? 0,
                     'updated_at'             => now()
                 ]);
-                $factura = DB::table('facturas')->where('id_factura', $tipoCobro)->first();
+                $factura = DB::table('facturas')->where('id_factura', $facturaExistente->id_factura)->first();
             }
 
             $tablaPagos = Schema::hasTable('pagos_facturas') ? 'pagos_facturas' : 'pagos_historial';
@@ -431,19 +470,26 @@ class PagosController extends Controller
             $vistaPdf = view()->exists('pagos.papeleta_pago') ? 'pagos.papeleta_pago' : 'reportes.papeleta_pago';
 
             $datosPdf = [
-                'factura'         => $factura, 
-                'toma'            => $toma, 
+                'factura'         => $factura,
+                'toma'            => $toma,
                 'cuotaPeriodo'    => $cuotaPeriodo,
                 'localidadNombre' => $localidadNombre,
                 'fecha_pago'      => Carbon::now(),
                 'esAnualidad'     => ($factura->periodo_mes === 'ANUAL')
             ];
-            
-            $pdf = Pdf::loadView($vistaPdf, $datosPdf)->setPaper([0, 0, 612, 396], 'portrait'); 
+
+            $pdf = Pdf::loadView($vistaPdf, $datosPdf)->setPaper([0, 0, 612, 396], 'portrait');
+
+            // Limpiar cualquier espacio o salida previa en el búfer antes de enviar el PDF al navegador
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+
             return $pdf->stream('Recibo_' . $factura->no_factura . '.pdf');
 
         } catch (\Exception $e) {
             DB::rollBack();
+            \Illuminate\Support\Facades\Log::error('Error en PagosController@store: ' . $e->getMessage());
             return back()->with('error', 'Error al generar el cobro: ' . $e->getMessage());
         }
     }
