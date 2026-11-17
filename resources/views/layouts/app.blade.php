@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="description" content="Sistema de Administración de Agua Potable y Saneamiento - H. Ayuntamiento de Acatic">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="{{ asset('assets/images/agua-potable.png') }}">
   <title>@yield('title', 'Agua Potable Acatic') | adminHMD</title>
 
   <!-- SCRIPT DE BLOQUEO DE MODO OSCURO (Debe ir antes de cualquier CSS) -->
@@ -25,6 +27,7 @@
   <link rel="stylesheet" href="{{ asset('assets/css/bootstrap.min.css') }}">
   <link rel="stylesheet" href="{{ asset('assets/vendors/bootstrap-icons/bootstrap-icons.css') }}">
   <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
+  <link rel="icon" type="image/png" href="{{ asset('/assets/images/agua-potable.png') }}">
 
   <!-- REGLAS CSS CONTUNDENTES PARA EVITAR CUALQUIER FONDO OSCURO -->
   <style>

@@ -21,8 +21,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Forzar esquema seguro y URLs dinámicas para ngrok y servidores locales
-    if (env('APP_ENV') !== 'local' || request()->header('x-forwarded-host')) {
+        if (config('app.env') === 'production') {
         URL::forceScheme('https');
     }
 

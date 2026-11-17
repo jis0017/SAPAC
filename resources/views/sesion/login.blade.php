@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <!-- Tus Estilos Personalizados (style.css) -->
     <link href="{{ asset('assets/css/style.css') }}" rel="stylesheet">
+    <link rel="icon" type="image/png" href="{{ asset('assets/images/agua-potable.png') }}">
     
     <style>
         /* Ajustes específicos para igualar la plantilla de pantalla dividida */
@@ -64,7 +65,7 @@
                 <h1 class="display-4 fw-bold mb-3">Iniciar sesión en</h1>
                 <h2 class="h3 fw-semibold mb-4 text-white opacity-75">Sistema de Agua Potable Acatic</h2>
                 <p class="opacity-75 fs-6" style="max-width: 420px; line-height: 1.6;">
-                    Bienvenido al sistema de Gestión Municipal de Agua Potable de Acatic.
+                    Bienvenido al Sistema de Agua Potable de Acatic.
                     Por favor, introduzca sus credenciales de trabajador para administrar el padrón, tomas de agua y pagos.
                 </p>
             </div>

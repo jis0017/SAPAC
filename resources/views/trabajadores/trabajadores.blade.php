@@ -5,7 +5,7 @@
 @section('content')
 <div class="container-fluid px-0">
 
-  <!-- ENCABEZADO -->
+  
   <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
     <div class="d-flex align-items-center">
       <div class="p-3 bg-primary bg-opacity-10 text-primary rounded-3 me-3 d-flex align-items-center justify-content-center shadow-sm" style="width: 54px; height: 54px;">
@@ -30,7 +30,7 @@
     </div>
   </div>
 
-  <!-- TARJETAS DE MÉTRICAS (KPIs) -->
+  
   <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3 mb-4">
     <div class="col">
       <div class="card border-0 shadow-sm p-3 h-100">
@@ -82,7 +82,7 @@
     </div>
   @endif
 
-  <!-- BARRA DE BÚSQUEDA -->
+  
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-3">
       <form action="{{ route('trabajadores.trabajadores') }}" method="GET">
@@ -95,7 +95,7 @@
     </div>
   </div>
 
-  <!-- TABLA PRINCIPAL -->
+  
   <div class="card border-0 shadow-sm">
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0">
@@ -155,7 +155,7 @@
       </table>
     </div>
 
-    <!-- PAGINACIÓN -->
+    
     <div class="card-footer bg-body border-0 py-4 d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
       <small class="text-muted fw-semibold">
         Mostrando <span class="text-primary">{{ $trabajadores->firstItem() ?? 0 }}</span> a <span class="text-primary">{{ $trabajadores->lastItem() ?? 0 }}</span> de {{ $trabajadores->total() }} registros
@@ -165,9 +165,9 @@
   </div> 
 </div> 
 
-<!-- ========================================================================= -->
-<!-- MODAL: GESTIÓN DE TIPOS / ROLES DE TRABAJADOR                             -->
-<!-- ========================================================================= -->
+
+
+
 <div class="modal fade" id="modalTiposTrabajador" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content border-0 shadow-lg rounded-4">
@@ -177,7 +177,7 @@
       </div>
       <div class="modal-body p-4">
         <div class="row g-4">
-          <!-- Formulario para agregar / editar rol -->
+          
           <div class="col-md-5 border-end">
             <h6 class="fw-bold mb-3 text-secondary" id="tituloFormRol">Registrar Nuevo Rol</h6>
             <form id="formTipoTrabajador" action="{{ route('trabajadores.tipos.store') }}" method="POST">
@@ -193,7 +193,7 @@
               </div>
             </form>
           </div>
-          <!-- Listado de roles existentes -->
+          
           <div class="col-md-7">
             <h6 class="fw-bold mb-3 text-secondary">Roles Existentes</h6>
             <div class="table-responsive border rounded-3" style="max-height: 250px; overflow-y: auto;">
@@ -232,7 +232,7 @@
   </div>
 </div>
 
-<!-- MODAL DE CONFIRMACIÓN PARA ELIMINAR ROL -->
+
 <div class="modal fade" id="modalEliminarRol" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" style="max-width: 400px;">
     <div class="modal-content border-0 shadow-lg p-3 text-center rounded-4">
@@ -258,7 +258,7 @@
   </div>
 </div>
 
-<!-- MODAL NUEVA / EDITAR TRABAJADOR -->
+
 <div class="modal fade" id="modalTrabajador" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 shadow-lg rounded-4">
@@ -321,7 +321,7 @@
   </div>
 </div>
 
-<!-- MODAL DE CONFIRMACIÓN PARA ELIMINAR -->
+
 <div class="modal fade" id="modalEliminarTrabajador" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" style="max-width: 400px;">
     <div class="modal-content border-0 shadow-lg p-3 text-center rounded-4">
@@ -347,9 +347,9 @@
   </div>
 </div>
 
-<!-- ========================================================================= -->
-<!-- MODAL DE ÉXITO GLOBAL (Palomita Verde estilo Tomas de Agua / Pozos)        -->
-<!-- ========================================================================= -->
+
+
+
 @if(session('success'))
 <div class="modal fade" id="modalExitoGlobal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
